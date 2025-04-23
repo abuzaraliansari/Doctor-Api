@@ -1,0 +1,8 @@
+{
+    "appService.zipIgnorePattern": [
+        "node_modules{,/**}",
+        ".vscode{,/**}"
+    ],
+    "appService.defaultWebAppToDeploy": "/subscriptions/9b3d34fa-68cb-463a-a765-30598f7f2bdc/resourceGroups/babralaApp/providers/Microsoft.Web/sites/babralaApi",
+    "appService.deploySubpath": "."
+}
