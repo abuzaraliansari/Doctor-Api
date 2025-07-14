@@ -3,7 +3,7 @@ const nodemailer = require('nodemailer');
 
 // Hardcoded authentication credentials
 const AUTH_USER = 'admin';
-const AUTH_PASS = 'admin123';
+const AUTH_PASS = 'aparle@cfgdv123';
 
 // Helper function for authentication
 function checkAuth(req, res) {
