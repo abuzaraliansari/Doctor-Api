@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors'); // Import the cors package
 const authRoutes = require('./routes/authRoutes');
+const HRMSRotes = require('./routes/HRMSRotes');
 
 
 
@@ -16,6 +17,7 @@ app.use(cors());
 
 // Use the auth routes
 app.use('/auth', authRoutes);
+app.use('/api', HRMSRotes);
 app.get('/test', (req, res) => {
     res.send('Hello World!');
 });

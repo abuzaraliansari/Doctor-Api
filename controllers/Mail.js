@@ -1,0 +1,235 @@
+const { sql, poolPromise } = require('../config/db');
+const nodemailer = require('nodemailer');
+
+// Hardcoded authentication credentials
+const AUTH_USER = 'admin';
+const AUTH_PASS = 'admin123';
+
+// Helper function for authentication
+function checkAuth(req, res) {
+  const { user, password } = req.body;
+  if (user !== AUTH_USER || password !== AUTH_PASS) {
+    res.status(401).json({ message: 'Unauthorized: Invalid user or password' });
+    return false;
+  }
+  return true;
+}
+
+exports.getUserData = async (req, res) => {
+  if (!checkAuth(req, res)) return;
+  try {
+    const pool = await poolPromise;
+
+    // Fetch user details, role, and last week's timesheet data
+    const result = await pool.request()
+      .query(`
+        WITH LastWeekEntries AS (
+          SELECT EmployeeID, EntryID, ProjectID, Date, TotalHours, Task, Comment, Status
+          FROM dbo.HRMS_TimesheetEntries
+          WHERE Date BETWEEN DATEADD(DAY, - (DATEPART(WEEKDAY, GETDATE()) + 6), GETDATE()) 
+                         AND DATEADD(DAY, - DATEPART(WEEKDAY, GETDATE()), GETDATE())
+        )
+        SELECT  
+          u.EmployeeID, u.username, u.email,
+          r.roleid, r.roleName,
+          t.EntryID
+        FROM dbo.HRMS_users u
+        LEFT JOIN dbo.HRMS_userrole ur ON u.EmployeeID = ur.EmployeeID
+        LEFT JOIN dbo.HRMS_roles r ON ur.roleid = r.roleid
+        LEFT JOIN LastWeekEntries t ON u.EmployeeID = t.EmployeeID;
+      `);
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: 'No users found' });
+    }
+
+    // Identify users who haven't submitted timesheets and whose roleid is not 2 or 3
+    const usersWithoutEntries = result.recordset.filter(user => !user.EntryID && user.roleid !== 2 && user.roleid !== 3);
+
+    // Send email notification to users without timesheet entries
+    if (usersWithoutEntries.length > 0) {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: 'timesheet.intmaven@gmail.com',
+          pass: 'jxxj jwdr jmuv ddxg'
+        }
+      });
+
+      usersWithoutEntries.forEach(async user => {
+        const subject = "Action Required: Timesheet Submission Pending for Last Week";
+        const cc = ["hemant@intmavens.com", "Vandana@intmavens.com"];
+        const body = `
+          <div style="font-family: Arial, sans-serif; font-size: 15px; color: #222;">
+            <p>Dear ${user.username},</p>
+            <p>This is a professional reminder that your timesheet for <b>last week</b> has not been submitted.</p>
+            <p><span style="color: red; font-weight: bold;">Please note that your timesheet for the previous week is still <u>pending submission</u>.</span></p>
+            <p>Timely submission of timesheets is essential for accurate payroll processing and project tracking. Kindly submit your timesheet at the earliest possible convenience.</p>
+            <p>If you have already completed this task, please disregard this message.</p>
+            <br>
+            <p>Best regards,<br>HR Team</p>
+          </div>
+        `;
+
+        const mailOptions = {
+          from: 'timesheet.intmaven@gmail.com',
+          to: user.email,
+          cc: cc,
+          subject: subject,
+          html: body
+        };
+
+        try {
+          await transporter.sendMail(mailOptions);
+          console.log(`Email sent to ${user.email}`);
+        } catch (err) {
+          console.error(`Error sending email to ${user.email}:`, err);
+        }
+      });
+    }
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error('Error retrieving user data:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// API to get all users, user roles, roles, and timesheet entries joined by EmployeeID and roleid
+exports.getAllHRMSData = async (req, res) => {
+  if (!checkAuth(req, res)) return;
+  try {
+    const pool = await poolPromise;
+    // Join users, userRoles, roles, and timesheetEntries
+    const query = `
+      SELECT 
+        u.EmployeeID, u.username, u.password, u.email, u.createdDate AS userCreatedDate, u.CreatedBy AS userCreatedBy, u.ModifiedDate AS userModifiedDate, u.ModifiedBy AS userModifiedBy,
+        ur.roleid, ur.createdDate AS userRoleCreatedDate, ur.CreatedBy AS userRoleCreatedBy, ur.ModifiedDate AS userRoleModifiedDate, ur.ModifiedBy AS userRoleModifiedBy,
+        r.roleName, r.createdDate AS roleCreatedDate, r.CreatedBy AS roleCreatedBy, r.ModifiedDate AS roleModifiedDate, r.ModifiedBy AS roleModifiedBy,
+        t.EntryID, t.ProjectID, t.Date, t.TotalHours, t.TaskID, t.Task, t.Comment, t.Status, t.CreatedBy AS timesheetCreatedBy, t.CreatedDate, t.ModifiedBy AS timesheetModifiedBy, t.ModifiedDate, t.ManagerComment, t.Cateogary
+      FROM [dbo].[HRMS_users] u
+      LEFT JOIN [dbo].[HRMS_userrole] ur ON u.EmployeeID = ur.EmployeeID
+      LEFT JOIN [dbo].[HRMS_roles] r ON ur.roleid = r.roleid
+      LEFT JOIN [dbo].[HRMS_TimesheetEntries] t ON u.EmployeeID = t.EmployeeID
+      ORDER BY u.EmployeeID, t.Date DESC
+    `;
+    const result = await pool.request().query(query);
+    res.json({
+      data: result.recordset
+    });
+  } catch (err) {
+    console.error('Error fetching joined HRMS data:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// API to auto-fill leave entries for last week (Mon-Fri) if TotalHours < 8, only for roleid=1 and EmployeeID not in (1,2,3)
+exports.getAllHRMSDataWithAutoFill = async (req, res) => {
+  if (!checkAuth(req, res)) return;
+  try {
+    const pool = await poolPromise;
+    // Only select employees with roleid = 1 and EmployeeID not in (1,2,3)
+    const employees = await pool.request().query(`
+      SELECT u.EmployeeID, u.username, u.email
+      FROM [dbo].[HRMS_users] u
+      INNER JOIN [dbo].[HRMS_userrole] ur ON u.EmployeeID = ur.EmployeeID
+      WHERE ur.roleid = 1 AND u.EmployeeID NOT IN (1,2,3)
+    `);
+    const leaveProjectId = 4; // ProjectID for Leave
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    // Calculate last week's Monday (Mon-Sun week)
+    const lastMonday = new Date(today);
+    lastMonday.setDate(today.getDate() - dayOfWeek - 6 + 1);
+
+    // Setup mail transporter (configure as per your SMTP)
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: 'timesheet.intmaven@gmail.com',
+        pass: 'jxxj jwdr jmuv ddxg'
+      }
+    });
+
+    for (const emp of employees.recordset) {
+      let autoFilledDates = [];
+      for (let i = 0; i < 5; i++) { // Mon-Fri
+        const date = new Date(lastMonday);
+        date.setDate(lastMonday.getDate() + i);
+        const dateStr = date.toISOString().split('T')[0];
+        const entriesResult = await pool.request()
+          .input('EmployeeID', sql.Int, emp.EmployeeID)
+          .input('Date', sql.Date, dateStr)
+          .query(`SELECT * FROM [dbo].[HRMS_TimesheetEntries] WHERE EmployeeID = @EmployeeID AND Date = @Date`);
+        const entries = entriesResult.recordset;
+        const totalHours = entries.reduce((sum, e) => sum + (e.TotalHours || 0), 0);
+        if (totalHours < 8) {
+          const leaveHours = 8 - totalHours;
+          const managerComment = `Auto-filled leave for remaining ${leaveHours} hour(s) on ${dateStr}`;
+          await pool.request()
+            .input('ProjectID', sql.Int, leaveProjectId)
+            .input('EmployeeID', sql.Int, emp.EmployeeID)
+            .input('Date', sql.Date, dateStr)
+            .input('TotalHours', sql.Decimal(4,2), leaveHours)
+            .input('TaskID', sql.Int, null)
+            .input('Task', sql.NVarChar, 'Leave')
+            .input('Comment', sql.NVarChar, managerComment)
+            .input('ManagerComment', sql.NVarChar, managerComment)
+            .input('Status', sql.NVarChar, 'Approved')
+            .input('CreatedBy', sql.NVarChar, 'System')
+            .input('Cateogary', sql.NVarChar, 'Other')
+            .query(`INSERT INTO [dbo].[HRMS_TimesheetEntries] (ProjectID, EmployeeID, Date, TotalHours, TaskID, Task, Comment, ManagerComment, Status, CreatedBy, Cateogary, CreatedDate) VALUES (@ProjectID, @EmployeeID, @Date, @TotalHours, @TaskID, @Task, @Comment, @ManagerComment, @Status, @CreatedBy, @Cateogary, GETDATE())`);
+          autoFilledDates.push(dateStr);
+        }
+      }
+      // Send mail if any auto-filled entries were made
+      if (autoFilledDates.length > 0 && emp.email) {
+        const mailBody = `
+Dear ${emp.username},
+
+This is to inform you that your timesheet entries for the following dates in the last week were automatically filled with 'Leave' to complete the required 8 hours per day:
+
+${autoFilledDates.map(d => `- ${d}`).join('\n')}
+
+These entries have been marked as 'Approved' and a note has been added in the Manager's Comment for your reference.
+
+If you have any questions or believe this was done in error, please contact your manager or HR.
+
+Best regards,
+HRMS System
+        `;
+        try {
+          await transporter.sendMail({
+            from: 'timesheet.intmaven@gmail.com',
+            to: emp.email,
+            subject: 'Timesheet Auto-Filled for Last Week',
+            text: mailBody
+          });
+        } catch (mailErr) {
+          console.error(`Failed to send mail to ${emp.email}:`, mailErr);
+        }
+      }
+    }
+    // --- Joined HRMS data logic ---
+    const query = `
+      SELECT 
+        u.EmployeeID, u.username, u.password, u.email, u.createdDate AS userCreatedDate, u.CreatedBy AS userCreatedBy, u.ModifiedDate AS userModifiedDate, u.ModifiedBy AS userModifiedBy,
+        ur.roleid, ur.createdDate AS userRoleCreatedDate, ur.CreatedBy AS userRoleCreatedBy, ur.ModifiedDate AS userRoleModifiedDate, ur.ModifiedBy AS userRoleModifiedBy,
+        r.roleName, r.createdDate AS roleCreatedDate, r.CreatedBy AS roleCreatedBy, r.ModifiedDate AS roleModifiedDate, r.ModifiedBy AS roleModifiedBy,
+        t.EntryID, t.ProjectID, t.Date, t.TotalHours, t.TaskID, t.Task, t.Comment, t.Status, t.CreatedBy AS timesheetCreatedBy, t.CreatedDate, t.ModifiedBy AS timesheetModifiedBy, t.ModifiedDate, t.ManagerComment, t.Cateogary
+      FROM [dbo].[HRMS_users] u
+      LEFT JOIN [dbo].[HRMS_userrole] ur ON u.EmployeeID = ur.EmployeeID
+      LEFT JOIN [dbo].[HRMS_roles] r ON ur.roleid = r.roleid
+      LEFT JOIN [dbo].[HRMS_TimesheetEntries] t ON u.EmployeeID = t.EmployeeID
+      ORDER BY u.EmployeeID, t.Date DESC
+    `;
+    const result = await pool.request().query(query);
+    res.json({
+      message: 'Leave entries auto-filled for last week where needed (roleid=1 only, except EmployeeID 1,2,3). Mails sent to affected employees.',
+      data: result.recordset
+    });
+  } catch (err) {
+    console.error('Error in getAllHRMSDataWithAutoFill:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
