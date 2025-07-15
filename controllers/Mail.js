@@ -1,22 +1,7 @@
 const { sql, poolPromise } = require('../config/db');
 const nodemailer = require('nodemailer');
 
-// Hardcoded authentication credentials
-const AUTH_USER = 'admin';
-const AUTH_PASS = 'aparle@cfgdv123';
-
-// Helper function for authentication
-function checkAuth(req, res) {
-  const { user, password } = req.body;
-  if (user !== AUTH_USER || password !== AUTH_PASS) {
-    res.status(401).json({ message: 'Unauthorized: Invalid user or password' });
-    return false;
-  }
-  return true;
-}
-
 exports.getUserData = async (req, res) => {
-  if (!checkAuth(req, res)) return;
   try {
     const pool = await poolPromise;
 
@@ -52,7 +37,7 @@ exports.getUserData = async (req, res) => {
         service: 'gmail',
         auth: {
           user: 'timesheet.intmaven@gmail.com',
-          pass: 'jxxj jwdr jmuv ddxg'
+          pass: 'jnim fvsv pstj qieu'
         }
       });
 
@@ -97,7 +82,6 @@ exports.getUserData = async (req, res) => {
 
 // API to get all users, user roles, roles, and timesheet entries joined by EmployeeID and roleid
 exports.getAllHRMSData = async (req, res) => {
-  if (!checkAuth(req, res)) return;
   try {
     const pool = await poolPromise;
     // Join users, userRoles, roles, and timesheetEntries
@@ -125,7 +109,6 @@ exports.getAllHRMSData = async (req, res) => {
 
 // API to auto-fill leave entries for last week (Mon-Fri) if TotalHours < 8, only for roleid=1 and EmployeeID not in (1,2,3)
 exports.getAllHRMSDataWithAutoFill = async (req, res) => {
-  if (!checkAuth(req, res)) return;
   try {
     const pool = await poolPromise;
     // Only select employees with roleid = 1 and EmployeeID not in (1,2,3)
@@ -147,7 +130,7 @@ exports.getAllHRMSDataWithAutoFill = async (req, res) => {
       service: 'gmail',
       auth: {
         user: 'timesheet.intmaven@gmail.com',
-        pass: 'jxxj jwdr jmuv ddxg'
+        pass: 'jnim fvsv pstj qieu'
       }
     });
 
