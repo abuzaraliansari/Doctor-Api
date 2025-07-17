@@ -2,21 +2,18 @@ const express = require('express');
 const authenticateToken = require('../middlewares/authMiddleware');
 const {
   getTimesheetEntriesByEmployee,
-  getProjectsByIds,
   createTimesheetEntry,
   updateTimesheetEntry,
   deleteTimesheetEntry,
-  approveTimesheetEntry,
-  bulkUpdateTimesheetStatus,
-  submitTimesheet,
-  bulkApproveTimesheetEntries,
-  getEmployeeOptions,
-  getProjectOptions
-} = require('../controllers/timesheetController');
+} = require('../HRMS_Controllers/timesheetController');
 
-const loginController = require('../controllers/login');
-const { changePassword } = require('../controllers/changePassword');
-const { getUserData, getAllHRMSDataWithAutoFill } = require('../controllers/Mail');
+const { approveTimesheetEntry, bulkApproveTimesheetEntries } = require('../HRMS_Controllers/Approve');
+const { getProjectsByIds, getEmployeeOptions, getProjectOptions } = require('../HRMS_Controllers/Projects');
+const { bulkUpdateTimesheetStatus, submitTimesheet } = require('../HRMS_Controllers/Submite');
+
+const loginController = require('../HRMS_Controllers/login');
+const { changePassword } = require('../HRMS_Controllers/UserManagment');
+const { getUserData, getAllHRMSDataWithAutoFill } = require('../HRMS_Controllers/Mail');
 
 const router = express.Router();
 
