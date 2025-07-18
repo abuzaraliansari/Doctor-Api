@@ -12,7 +12,7 @@ exports.login = async (req, res) => {
       .input('password', sql.VarChar, password)
       .query(`
         SELECT 
-          u.EmployeeID, u.username, u.email, u.createdDate, u.CreatedBy, u.ModifiedDate, u.ModifiedBy,
+          u.EmployeeID, u.username, u.email, u.createdDate, u.CreatedBy, u.ModifiedDate, u.ModifiedBy, u.IsManager,
           r.roleid, r.roleName, r.createdDate AS roleCreatedDate, r.CreatedBy AS roleCreatedBy, r.ModifiedDate AS roleModifiedDate, r.ModifiedBy AS roleModifiedBy
         FROM HRMS_users u
         LEFT JOIN HRMS_userrole ur ON u.EmployeeID = ur.EmployeeID
@@ -33,6 +33,7 @@ exports.login = async (req, res) => {
       CreatedBy: result.recordset[0].CreatedBy,
       ModifiedDate: result.recordset[0].ModifiedDate,
       ModifiedBy: result.recordset[0].ModifiedBy,
+      IsManager: result.recordset[0].IsManager, // Add IsManager to user object
       roles: result.recordset
         .filter(r => r.roleid)
         .map(r => ({
@@ -45,6 +46,18 @@ exports.login = async (req, res) => {
         }))
     };
 
+    // --- NEW: Get managed employees if this user is a manager ---
+    const managedEmployeesResult = await pool.request()
+      .input('managerId', sql.Int, user.EmployeeID)
+      .query(`
+        SELECT e.EmployeeID, e.username, e.email
+        FROM ManagerEmployee me
+        JOIN HRMS_users e ON me.EmployeeID = e.EmployeeID
+        WHERE me.ManagerID = @managerId
+      `);
+
+    user.managedEmployees = managedEmployeesResult.recordset; // Add to user object
+
     // Generate JWT token
     const token = jwt.sign(
       {
@@ -56,7 +69,7 @@ exports.login = async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    res.json({ user, token }); // Return user and token
+    res.json({ success: true, user, token }); // Keep response compatible with frontend
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: 'Server error'});
