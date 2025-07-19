@@ -58,6 +58,41 @@ exports.login = async (req, res) => {
 
     user.managedEmployees = managedEmployeesResult.recordset; // Add to user object
 
+    // --- NEW: Get managed employees with full details and recursive manager check ---
+    async function getManagedEmployeesWithDetails(managerId) {
+      // Get all employees managed by this manager
+      const managedResult = await pool.request()
+        .input('managerId', sql.Int, managerId)
+        .query(`
+          SELECT 
+            e.EmployeeID, e.username, e.email, e.createdDate, e.CreatedBy, e.ModifiedDate, e.ModifiedBy, e.IsManager
+          FROM ManagerEmployee me
+          JOIN HRMS_users e ON me.EmployeeID = e.EmployeeID
+          WHERE me.ManagerID = @managerId
+        `);
+      const employees = managedResult.recordset;
+      // For each managed employee, get their roles and recursively their managed employees if they are a manager
+      for (let emp of employees) {
+        // Get roles for this employee
+        const rolesResult = await pool.request()
+          .input('empId', sql.Int, emp.EmployeeID)
+          .query(`
+            SELECT r.roleid, r.roleName, r.createdDate AS roleCreatedDate, r.CreatedBy AS roleCreatedBy, r.ModifiedDate AS roleModifiedDate, r.ModifiedBy AS roleModifiedBy
+            FROM HRMS_userrole ur
+            LEFT JOIN HRMS_roles r ON ur.roleid = r.roleid
+            WHERE ur.EmployeeID = @empId
+          `);
+        emp.roles = rolesResult.recordset;
+        // If this employee is also a manager, get their managed employees recursively
+        if (emp.IsManager) {
+          emp.managedEmployees = await getManagedEmployeesWithDetails(emp.EmployeeID);
+        }
+      }
+      return employees;
+    }
+
+    user.managedEmployees = await getManagedEmployeesWithDetails(user.EmployeeID);
+
     // Generate JWT token
     const token = jwt.sign(
       {
