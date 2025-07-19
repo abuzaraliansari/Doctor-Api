@@ -12,7 +12,7 @@ const { getProjectsByIds, getEmployeeOptions, getProjectOptions } = require('../
 const { bulkUpdateTimesheetStatus, submitTimesheet } = require('../HRMS_Controllers/Submite');
 
 const loginController = require('../HRMS_Controllers/login');
-const { changePassword } = require('../HRMS_Controllers/UserManagment');
+const { changePassword, forgetPassword } = require('../HRMS_Controllers/UserManagment');
 const { getUserData, getAllHRMSDataWithAutoFill } = require('../HRMS_Controllers/Mail');
 
 const router = express.Router();
@@ -31,6 +31,7 @@ router.post('/bulk-update', bulkUpdateTimesheetStatus);
 router.post('/submit', submitTimesheet);
 router.post('/bulk', bulkApproveTimesheetEntries);
 router.post('/changePassword', changePassword);
+router.post('/forgetPassword', forgetPassword);
 router.post('/getUserData', getUserData);
 router.post('/getAllHRMSDataWithAutoFill', getAllHRMSDataWithAutoFill);
 router.get('/employeeOptions', getEmployeeOptions);

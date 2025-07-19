@@ -64,3 +64,27 @@ exports.getProjectOptions = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch project options' });
   }
 };
+
+// GET /api/category/options (from DB)
+exports.getCategoryOptions = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query('SELECT CategoryName FROM HRMS_Categories ORDER BY CategoryName');
+    res.json(result.recordset.map(row => row.CategoryName));
+  } catch (err) {
+    console.error('Error fetching category options:', err);
+    res.status(500).json({ error: 'Failed to fetch category options' });
+  }
+};
+
+// GET /api/status/options (from DB)
+exports.getStatusOptions = async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query('SELECT StatusName FROM HRMS_Statuses ORDER BY StatusName');
+    res.json(result.recordset.map(row => row.StatusName));
+  } catch (err) {
+    console.error('Error fetching status options:', err);
+    res.status(500).json({ error: 'Failed to fetch status options' });
+  }
+};

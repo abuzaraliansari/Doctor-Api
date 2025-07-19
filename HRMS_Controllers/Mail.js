@@ -1,6 +1,23 @@
 const { sql, poolPromise } = require('../config/db');
 const nodemailer = require('nodemailer');
 
+// Helper to get current weekday (0=Sunday, 1=Monday, ..., 5=Friday, 6=Saturday)
+function getCurrentWeekday() {
+  const today = new Date();
+  return today.getDay();
+}
+
+// Helper to check if it's Friday, Monday morning, or Monday night
+function getMailType() {
+  const now = new Date();
+  const weekday = now.getDay();
+  const hour = now.getHours();
+  if (weekday === 5) return 'friday'; // Friday
+  if (weekday === 1 && hour < 12) return 'monday-morning'; // Monday morning
+  if (weekday === 1 && hour >= 18) return 'monday-night'; // Monday night
+  return null;
+}
+
 exports.getUserData = async (req, res) => {
   try {
     const pool = await poolPromise;
@@ -30,8 +47,6 @@ exports.getUserData = async (req, res) => {
 
     // Identify users who haven't submitted timesheets and whose roleid is not 2 or 3
     const usersWithoutEntries = result.recordset.filter(user => !user.EntryID && user.roleid !== 2 && user.roleid !== 3);
-
-    // Send email notification to users without timesheet entries
     if (usersWithoutEntries.length > 0) {
       const transporter = nodemailer.createTransport({
         service: 'gmail',
@@ -40,22 +55,36 @@ exports.getUserData = async (req, res) => {
           pass: 'jnim fvsv pstj qieu'
         }
       });
-
-      usersWithoutEntries.forEach(async user => {
-        const subject = "Action Required: Timesheet Submission Pending for Last Week";
-        const cc = ["hemant@intmavens.com", "Vandana@intmavens.com"];
-        const body = `
-          <div style="font-family: Arial, sans-serif; font-size: 15px; color: #222;">
+      const mailType = getMailType();
+      for (const user of usersWithoutEntries) {
+        let subject, body, cc = [];
+        if (mailType === 'friday') {
+          subject = 'Gentle Reminder: Timesheet Submission Due Tomorrow';
+          body = `<div style="font-family: Arial, sans-serif; font-size: 15px; color: #222;">
             <p>Dear ${user.username},</p>
-            <p>This is a professional reminder that your timesheet for <b>last week</b> has not been submitted.</p>
-            <p><span style="color: red; font-weight: bold;">Please note that your timesheet for the previous week is still <u>pending submission</u>.</span></p>
-            <p>Timely submission of timesheets is essential for accurate payroll processing and project tracking. Kindly submit your timesheet at the earliest possible convenience.</p>
-            <p>If you have already completed this task, please disregard this message.</p>
-            <br>
-            <p>Best regards,<br>HR Team</p>
-          </div>
-        `;
-
+            <p>This is a gentle reminder to submit your timesheet for this week by end of day today or tomorrow morning.</p>
+            <p>Timely submission is essential for payroll and project tracking.</p>
+            <br><p>Best regards,<br>HR Team</p></div>`;
+          cc = [];
+        } else if (mailType === 'monday-morning') {
+          subject = 'Warning: Timesheet Submission Overdue';
+          body = `<div style="font-family: Arial, sans-serif; font-size: 15px; color: #222;">
+            <p>Dear ${user.username},</p>
+            <p><span style="color: red; font-weight: bold;">Your timesheet for last week is overdue.</span></p>
+            <p>Please submit it immediately to avoid auto-filling and escalation.</p>
+            <br><p>Best regards,<br>HR Team</p></div>`;
+          cc = ['hemant@intmavens.com', 'Vandana@intmavens.com'];
+        } else if (mailType === 'monday-night') {
+          subject = 'Timesheet Auto-Submitted for Last Week';
+          body = `<div style="font-family: Arial, sans-serif; font-size: 15px; color: #222;">
+            <p>Dear ${user.username},</p>
+            <p>Your timesheet for last week has been auto-filled as you did not submit it on time.</p>
+            <p>If you have questions, contact HR.</p>
+            <br><p>Best regards,<br>HR Team</p></div>`;
+          cc = ['hemant@intmavens.com', 'Vandana@intmavens.com'];
+        } else {
+          continue; // Not the right time to send any mail
+        }
         const mailOptions = {
           from: 'timesheet.intmaven@gmail.com',
           to: user.email,
@@ -63,14 +92,13 @@ exports.getUserData = async (req, res) => {
           subject: subject,
           html: body
         };
-
         try {
           await transporter.sendMail(mailOptions);
-          console.log(`Email sent to ${user.email}`);
+          console.log(`Email sent to ${user.email} [${mailType}]`);
         } catch (err) {
           console.error(`Error sending email to ${user.email}:`, err);
         }
-      });
+      }
     }
 
     res.json(result.recordset);
