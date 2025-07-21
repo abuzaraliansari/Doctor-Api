@@ -244,3 +244,96 @@ HRMS System
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// POST /api/sendWelcomeMails
+exports.sendWelcomeMails = async (req, res) => {
+  const { users } = req.body; // users: [{ username, password, email }]
+  if (!Array.isArray(users) || users.length === 0) {
+    return res.status(400).json({ message: 'users array is required' });
+  }
+  try {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: 'timesheet.intmaven@gmail.com',
+        pass: 'jnim fvsv pstj qieu'
+      }
+    });
+    for (const user of users) {
+      const mailBody = `
+  <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+    <p>Dear ${user.username},</p>
+
+    <p>Welcome to the team! We are pleased to inform you that you now have access to our official <strong>Timesheet Entry Portal</strong>, which plays a crucial role in maintaining accurate records of work hours, task accountability, and overall project efficiency.</p>
+
+    <hr>
+    <h3>✅ Steps to Get Started</h3>
+    <ul>
+      <li><strong>Access the Portal:</strong> <a href="https://timesheet.intmavens.com" target="_blank">Timesheet Management Portal</a></li>
+      <li><strong>Log In:</strong> Use your credentials provided below</li>
+      <li><strong>Submit Your Entries:</strong> Fill in your daily tasks and the number of hours worked</li>
+      <li><strong>Review Carefully:</strong> Double-check all entries before saving or submitting</li>
+    </ul>
+
+    <hr>
+    <h3>🔗 Portal Access</h3>
+    <p><a href="https://timesheet.intmavens.com" target="_blank">https://timesheet.intmavens.com</a></p>
+
+    <h4>🧾 Your Login Credentials</h4>
+    <p><strong>Username:</strong> ${user.username}<br>
+       <strong>Password:</strong> ${user.password}</p>
+
+    <hr>
+    <h3>⏱️ Daily & Weekly Time Entry Rules</h3>
+    <ul>
+      <li>A minimum of <strong>8 hours per day</strong> is required</li>
+      <li>A minimum of <strong>40 hours per week</strong> must be submitted</li>
+      <li>You cannot submit more than <strong>10 hours in a single day</strong></li>
+      <li>You cannot submit more than <strong>45 hours in total</strong> for the week</li>
+      <li>For any single task, the maximum allowed is <strong>3 hours</strong></li>
+      <li><strong>Leave</strong> entries can be up to 8 hours</li>
+    </ul>
+
+    <hr>
+    <h3>🔔 Compliance Guidelines</h3>
+    <p>
+      Timesheets must be completed and submitted by <strong>end of day every Friday</strong>.<br>
+      Failure to submit by Friday will result in a formal warning.<br>
+      If not submitted by <strong>Monday 6:00 PM</strong>, the system will auto-mark them as "Leave".<br>
+      We encourage you to maintain timely entries to avoid issues.
+    </p>
+
+    <hr>
+    <h3>📩 Need Assistance?</h3>
+    <p>
+      For help, contact:<br>
+      Mohammad Abuzar – <a href="mailto:Abuzar@intmavens.com">Abuzar@intmavens.com</a><br>
+      Vandana Kumari – <a href="mailto:Vandana@intmavens.com">Vandana@intmavens.com</a>
+    </p>
+
+    <hr>
+    <p>We appreciate your cooperation and look forward to your contributions.<br><br>
+    Warm regards,<br>
+    HR Team</p>
+  </div>
+`;
+
+      const mailOptions = {
+        from: 'timesheet.intmaven@gmail.com',
+        to: user.email,
+        cc: 'Vandana@intmavens.com',
+        subject: '📢 Welcome to Timesheet Portal – Your Login Credentials & Weekly Submission Policy',
+        html: mailBody
+      };
+      try {
+        await transporter.sendMail(mailOptions);
+      } catch (err) {
+        console.error(`Error sending welcome mail to ${user.email}:`, err);
+      }
+    }
+    res.json({ message: 'Welcome mails sent to all users.' });
+  } catch (err) {
+    console.error('Error sending welcome mails:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
